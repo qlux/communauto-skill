@@ -441,104 +441,62 @@ def extend_vs_new(package: str, day1_hours: float, day1_km: float,
 # plateau
 # ---------------------------------------------------------------------------
 
-def _combined_cost_at(pkg, hours: float, is_flex: bool, weekend_days: int = 0) -> tuple:
-    """Time-cost-only version of the FLEX-vs-station comparison used in trip_cost,
-    evaluated at a given cumulative hours mark. Returns (cost, winner)."""
-    station_total = station_time_cost(pkg, hours, weekend_days)["total"]
-    if not is_flex:
-        return station_total, "station"
-    flex_total = flex_time_cost(hours)["total"]
-    if flex_total <= station_total:
-        return flex_total, "flex"
-    return station_total, "station"
-
-
 def plateau(package: str, hours_so_far: float, km_so_far: float, is_flex: bool = False,
-            threshold: float = 5.0, start_time: str = None, weekend_days: int = 0) -> dict:
+            threshold: float = 5.0, start_time: str = None) -> dict:
     """
     Given usage so far, find:
       - the elapsed-hours point at which time-cost hits the current day's cap
         (after which more time costs nothing extra, only added km would)
       - how much longer the car can be kept before the price rises by
         `threshold` dollars (bounded by the plateau point)
-
-    For FLEX vehicles this compares against the station-equivalent price the
-    same way trip_cost() does (Communauto always bills whichever is cheaper),
-    so the reported cap and plateau reflect whichever side is actually
-    winning — not just the raw FLEX day cap.
     """
     pkg = resolve_package(package)
+    hourly = FLEX_HOURLY_EQUIV if is_flex else pkg.hourly
 
     day_index = int(hours_so_far // 24) + 1
     hours_into_day = hours_so_far - (day_index - 1) * 24
-    day_boundary_hours = day_index * 24
 
-    cost_so_far, winner_so_far = _combined_cost_at(pkg, hours_so_far, is_flex, weekend_days)
-    plateau_value, winner_at_boundary = _combined_cost_at(pkg, day_boundary_hours, is_flex, weekend_days)
-    already_capped = abs(cost_so_far - plateau_value) < 1e-6
+    if is_flex:
+        cap = FLEX_DAY_CAP
+    else:
+        cap = pkg.day1_cap if day_index == 1 else pkg.day_add_cap
+
+    cost_so_far = min(hours_into_day * hourly, cap)
+    already_capped = cost_so_far >= cap - 1e-9
 
     result = {
-        "package": pkg.label,
-        "vehicle": "FLEX" if is_flex else "station",
+        "package": "FLEX" if is_flex else pkg.label,
         "hours_so_far": hours_so_far,
         "day_index_of_rental": day_index,
         "hours_into_current_day": round(hours_into_day, 2),
         "time_cost_so_far": round(cost_so_far, 2),
-        "billed_as_so_far": winner_so_far,
-        "day_cap": round(plateau_value, 2),
+        "day_cap": cap,
         "already_at_plateau": already_capped,
     }
-    if is_flex and winner_so_far == "station":
-        result["note"] = (
-            "Billed at the station-equivalent rate, not the raw FLEX cap — FLEX is "
-            "always billed at whichever is cheaper."
-        )
 
     if already_capped:
         hours_left_in_day = 24 - hours_into_day
         result["plateau_message"] = (
-            f"Time cost is already flat at {plateau_value:.2f}$ for this day — you can "
-            f"keep the car for up to {hours_left_in_day:.1f} more hour(s) (until this "
-            f"rental's 24h mark) with no extra time cost, only additional km would add "
-            f"to the bill."
+            f"Time cost is already flat at {cap:.2f}$ for this day — you can keep the car "
+            f"for up to {hours_left_in_day:.1f} more hour(s) (until this rental's 24h mark) "
+            f"with no extra time cost, only additional km would add to the bill."
         )
         result["hours_until_next_day_boundary"] = round(hours_left_in_day, 2)
     else:
-        lo, hi = hours_so_far, day_boundary_hours
-        for _ in range(60):
-            mid = (lo + hi) / 2
-            val, _ = _combined_cost_at(pkg, mid, is_flex, weekend_days)
-            if val >= plateau_value - 1e-6:
-                hi = mid
-            else:
-                lo = mid
-        plateau_hour = hi
-        hours_left_to_plateau = plateau_hour - hours_so_far
+        hours_to_cap = cap / hourly
+        hours_left_to_plateau = hours_to_cap - hours_into_day
         result["hours_until_plateau"] = round(hours_left_to_plateau, 2)
         result["plateau_message"] = (
-            f"Price keeps climbing until you hit {plateau_hour:.2f} total hours for this "
-            f"day (about {hours_left_to_plateau:.2f} more hour(s) from now), at which "
-            f"point the day's time cost is capped at {plateau_value:.2f}$ and any further "
-            f"time today is free (km still adds up)."
+            f"Price keeps climbing by {hourly:.2f}$/hour until you hit {hours_to_cap:.2f} total "
+            f"hours for this day (i.e. about {hours_left_to_plateau:.2f} more hour(s) from now), "
+            f"at which point the day's time cost is capped at {cap:.2f}$ and any further time "
+            f"today is free (km still adds up)."
         )
-
-        target = cost_so_far + threshold
-        lo2, hi2 = hours_so_far, plateau_hour
-        if plateau_value <= target + 1e-9:
-            hours_for_threshold = hours_left_to_plateau
-        else:
-            for _ in range(60):
-                mid = (lo2 + hi2) / 2
-                val, _ = _combined_cost_at(pkg, mid, is_flex, weekend_days)
-                if val >= target - 1e-6:
-                    hi2 = mid
-                else:
-                    lo2 = mid
-            hours_for_threshold = hi2 - hours_so_far
+        hours_for_threshold = min(threshold / hourly, hours_left_to_plateau)
         result["hours_until_next_threshold"] = round(hours_for_threshold, 2)
         result["threshold_message"] = (
-            f"You can keep the car about {hours_for_threshold:.2f} more hour(s) before "
-            f"the price goes up by {threshold:.2f}$ or more."
+            f"You can keep the car about {hours_for_threshold:.2f} more hour(s) before the "
+            f"price goes up by {threshold:.2f}$ or more."
         )
 
     if start_time:
@@ -606,8 +564,6 @@ def main():
     p3.add_argument("--threshold", type=float, default=5.0)
     p3.add_argument("--start-time", default=None,
                      help="ISO datetime the rental started, e.g. 2026-08-09T17:00")
-    p3.add_argument("--weekend-days", type=int, default=0,
-                     help="Number of weekend days covered so far (weekend surcharge)")
 
     args = parser.parse_args()
 
@@ -620,7 +576,7 @@ def main():
                              day2_is_weekday=not args.day2_weekend)
     elif args.command == "plateau":
         out = plateau(args.package, args.hours_so_far, args.km_so_far, args.flex,
-                       args.threshold, args.start_time, args.weekend_days)
+                       args.threshold, args.start_time)
     else:
         parser.error("unknown command")
         return

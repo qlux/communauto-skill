@@ -1,6 +1,6 @@
 ---
 name: communauto-trip-cost
-description: Calculate the cost of a Communauto car-sharing trip in Québec (Montréal or Québec City) — station vehicles or FLEX (free-floating) — for any subscription package, defaulting to Économique Extra when none is given. Use this whenever the user asks about Communauto pricing, wants to compare FLEX vs station-vehicle cost, is deciding whether to extend a rental into a next-day trip vs returning the car and booking a fresh one, or wants to know how much longer they can keep a car before the price goes up (or before it stops going up entirely because they've hit the daily cap). Trigger on mentions of Communauto, auto-partage, car-sharing trip cost in Québec/Montréal, FLEX pricing, or "how much will it cost to keep the car until X".
+description: Calculate the cost of a Communauto car-sharing trip in Québec (Montréal or Québec City) — station vehicles or FLEX (free-floating) — for any subscription package, defaulting to Économique Extra when none is given. Use this whenever the user asks about Communauto pricing, wants to compare FLEX vs station-vehicle cost, is deciding whether to extend a rental into a next-day trip vs returning the car and booking a fresh one, wants to know how much longer they can keep a car before the price goes up (or before it stops going up entirely because they've hit the daily cap), asks about the family-vehicle or minivan surcharge, or is asking about Tarif Travail (the flat workday rate). Trigger on mentions of Communauto, auto-partage, car-sharing trip cost in Québec/Montréal, FLEX pricing, vehicle class surcharges, Tarif Travail, or "how much will it cost to keep the car until X".
 ---
 
 # Communauto trip cost calculator
@@ -16,16 +16,18 @@ been checked against every worked example Communauto itself publishes in the
 official tariff PDF, so trust its numbers over a hand calculation.
 
 Read `references/tarifs.md` for the full rate table and things the script
-intentionally doesn't model (Tarif Longue distance, minivan/family vehicle
-surcharges, damage-waiver options) — mention those in words if they're
-relevant to what the user is asking, rather than trying to compute them.
+intentionally doesn't model (Tarif Longue distance, trips >28 days, damage-
+waiver options) — mention those in words if they're relevant to what the user
+is asking, rather than trying to compute them.
 
-**Rates were last confirmed against a PDF dated 31 janvier 2025.** If a
-computed number seems inconsistent with something the user tells you they
-were actually charged, or it's been a while, re-fetch
-https://montreal.communauto.com/tarifs/ (or the linked grille tarifaire PDF)
-and update the constants at the top of `scripts/communauto_cost.py` before
-proceeding — don't silently keep using stale numbers.
+**All rates — station-vehicle, FLEX, and Tarif Travail — were updated
+2026-08-11** from screenshots of the user's own account (superseding the
+older 31 janvier 2025 PDF grid). If a computed number seems inconsistent
+with something the user tells you they were actually charged, or it's been
+a while, re-fetch https://montreal.communauto.com/tarifs/ (or ask for a
+fresh screenshot) and update the constants at the top of
+`scripts/communauto_cost.py` before proceeding — don't silently keep using
+stale numbers.
 
 ## Gathering inputs
 
@@ -36,9 +38,11 @@ script: `liberte`, `liberte_plus`, `economique`, `economique_plus`,
 
 You'll generally need: hours (or a start/end time you can convert), km
 (estimate is fine if the user doesn't have an exact number — ask if it
-meaningfully changes the answer), and whether it's a FLEX vehicle or a
-station car. Don't block on a missing km estimate for short local trips —
-proceed with a reasonable assumption and say so.
+meaningfully changes the answer), whether it's a FLEX vehicle or a station
+car, and vehicle class (standard, family, or minivan — ask if not stated,
+since it's a 10-15% swing on the whole trip cost). Don't block on a missing
+km estimate for short local trips — proceed with a reasonable assumption and
+say so.
 
 ## Three things this skill answers
 
@@ -48,12 +52,26 @@ proceed with a reasonable assumption and say so.
 python3 scripts/communauto_cost.py trip-cost --package economique_extra --hours 2.5 --km 35 --flex
 ```
 
-Drop `--flex` for a station vehicle. This reports the station price, and for
-FLEX trips, the FLEX price, the station price used as the comparison
-(4-hour minimum applies only on the station side of that comparison, per
-Communauto's rule), and `final_price` / `billed_as` showing which one wins.
-It also flags when the "aller-retour rapide" fallback (Liberté Plus pricing)
-would beat the rider's own Économique-family rate.
+Drop `--flex` for a station vehicle. Add `--vehicle-class family` (+10%) or
+`--vehicle-class minivan` (+15%) if it's not a standard-category car — this
+surcharge applies to the whole trip cost (time + km combined) and is layered
+on as the final step regardless of whether FLEX or station pricing wins. Add
+`--weekend-days N` if the rental spans Saturday/Sunday (all packages carry a
+35¢/heure-or-3,50$/jour weekend surcharge, not just Liberté). Add `--weekday`
+for Économique Extra trips ≤10h on a Monday–Friday — this makes the script
+also check Tarif Travail (24$ flat + km beyond 40) as a candidate. Tarif
+Travail competes against the **station-equivalent** price only; it is never
+compared against the raw FLEX per-minute price, even on a FLEX booking —
+Communauto only applies it when the trip would otherwise be billed at the
+station rate. Ask the user whether the trip is a weekday before assuming;
+don't default `--weekday` on without confirming.
+
+This reports the station price, and for FLEX trips, the FLEX price, the
+station price used as the comparison (4-hour minimum applies only on the
+station side of that comparison, per Communauto's rule), and `final_price` /
+`billed_as` showing which one wins. It also flags when the "aller-retour
+rapide" fallback (Liberté Plus pricing) would beat the rider's own
+Économique-family rate.
 
 ### 2. Extend the same rental, or return and book a new one? (`extend-vs-new`)
 
@@ -73,7 +91,7 @@ tomorrow?), which is worth naming explicitly rather than implying the math
 alone settles it.
 
 If the package is Économique Extra and day 2 is a weekday with ≤10 hours of
-use, the script also flags Tarif Travail (22$ flat) as a likely-cheaper
+use, the script also flags Tarif Travail (24$ flat) as a likely-cheaper
 third option — check it against both computed totals and mention it if it
 wins, since it can beat extending in cases where the car would otherwise sit
 overnight only lightly used.
@@ -86,13 +104,19 @@ python3 scripts/communauto_cost.py plateau --package economique_extra \
 ```
 
 Use `--flex` if it's a FLEX vehicle. `--threshold` defaults to 5 (dollars) —
-override it if the user asks for a different "worth it" amount. This
-reports:
+override it if the user asks for a different "worth it" amount. Add
+`--weekend-days N` if applicable, same as `trip-cost`. This reports:
 - Whether the day's time cost is already capped (past this point, more time
   costs nothing until the 24h mark — only added km would show up).
 - If not yet capped: the elapsed-hours point (and clock time, if
   `--start-time` was given) where it *will* cap, and how much longer they
   can keep the car before the running cost rises by the threshold amount.
+
+For FLEX vehicles, this does the same FLEX-vs-station comparison as
+`trip-cost` (whichever is cheaper wins) rather than just reporting the raw
+FLEX day cap — check `billed_as_so_far` in the output to see which side is
+winning. This matters: an Économique Extra FLEX trip usually plateaus at the
+much lower station-equivalent cap (~23$), not the FLEX cap (50$).
 
 Include `--start-time` whenever you know when the rental began — clock
 times are much easier for the user to act on than "1.9 more hours."

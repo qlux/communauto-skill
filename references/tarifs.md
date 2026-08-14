@@ -3,11 +3,15 @@
 Source: https://montreal.communauto.com/tarifs/ and the linked PDF
 https://communauto.com/wp-content/uploads/pdf/qc/grille-tarifaire-qc.pdf
 (applies to Montréal and Québec City — same province-wide grid).
-**Last confirmed against the PDF: dated "31 janvier 2025" at the bottom of the document.**
+**Station-vehicle table below updated 2026-08-11 from pricing screenshots the user
+provided directly (their own account view), superseding the 31 janvier 2025 PDF grid
+previously used.** FLEX section further down was NOT part of that update and still
+reflects the older PDF — reconfirm if a FLEX number looks off.
 Communauto changes these numbers from time to time — if a computed price looks
 off, or the user mentions a specific number that disagrees with this file, prefer
-re-fetching https://montreal.communauto.com/tarifs/ or the PDF above and update
-`scripts/communauto_cost.py` accordingly rather than trusting stale numbers.
+re-fetching https://montreal.communauto.com/tarifs/ or the PDF above (or asking the
+user for a fresh screenshot of their plan page) and update `scripts/communauto_cost.py`
+accordingly rather than trusting stale numbers.
 
 Gas and maintenance are always included in the rates below; taxes are extra.
 
@@ -15,14 +19,16 @@ Gas and maintenance are always included in the rates below; taxes are extra.
 
 | Forfait | Frais d'abonnement | $/heure | Max 1er jour | Max jour additionnel | Km |
 |---|---|---|---|---|---|
-| Liberté | Gratuit | 13,50 $ | 55 $ | 50 $ | 75 km inclus/trajet, 27¢/km après |
-| Liberté Plus | 45 $/année | 6,85 $ | 50 $ | 35 $ | +25¢/km (km 1-50), 22¢/km après 50 |
-| Économique | 45 $/année | 3,60 $ | 30 $/jour (flat) | — | +45¢/km (km 1-50), 32¢/km après 50 |
-| Économique Plus | 12,50 $/mois | 3,20 $ | 26 $/jour (flat) | — | +37¢/km (km 1-50), 29¢/km après 50 |
-| Économique Extra | 30 $/mois | 2,90 $ | 23 $/jour (flat) | — | +29¢/km (flat, no tiers) |
+| Liberté | Gratuit | 14,25 $ | 55 $ | 50 $ | 75 km inclus/trajet, 31¢/km après |
+| Liberté Plus | 45 $/année | 7,05 $ | 50 $ | 35,50 $ | +29¢/km (km 1-50), 26¢/km après 50 |
+| Économique | 45 $/année | 3,80 $ | 31,50 $/jour (flat) | — | +49¢/km (km 1-50), 36¢/km après 50 |
+| Économique Plus | 12,50 $/mois | 3,30 $ | 26,50 $/jour (flat) | — | +41¢/km (km 1-50), 33¢/km après 50 |
+| Économique Extra | 30 $/mois | 3,00 $ | 23 $/jour (flat) | — | +33¢/km (flat, no tiers) |
 
-* Liberté: add 35¢/heure or 3,50$/jour (whichever lower) on Saturday/Sunday — this
-  weekend surcharge does NOT apply when the trip ends up billed at FLEX rates.
+* All forfaits: add 35¢/heure or 3,50$/jour (whichever lower) on Saturday/Sunday
+  — this weekend surcharge does NOT apply when the trip ends up billed at FLEX
+  rates. (Confirmed against a real Économique Extra receipt on 2026-08-11 — it's
+  not Liberté-exclusive as earlier notes here assumed.)
 * Droit d'adhésion remboursable (refundable membership deposit, not a fee): 500$
   individual / 750$ family, for Économique / Économique Plus / Économique Extra.
   Fully refunded after 1 year if you leave (3-month notice required). Not relevant
@@ -30,9 +36,11 @@ Gas and maintenance are always included in the rates below; taxes are extra.
 
 ## FLEX (free-floating vehicles)
 
-- 41¢/minute, capped at the equivalent of 13,50$/heure, capped again at 50$/jour
+**Updated 2026-08-11 from the user's own account/plan page:**
+
+- 43¢/minute, capped at the equivalent of 14,25$/heure, capped again at 50$/jour
   (time cost only — km billed separately).
-- 75 km included per trip, 27¢/km after 75 km.
+- 75 km included per trip, 31¢/km after 75 km.
 - A FLEX trip is **always billed at whichever is lower**: the FLEX price above, or
   the price it would have cost on a station vehicle at the rider's own subscribed
   package rate. This comparison happens regardless of trip duration. If the
@@ -45,16 +53,27 @@ Gas and maintenance are always included in the rates below; taxes are extra.
 
 ## Tarif Travail (flat workday rate) — Économique Extra holders only
 
-- 22 $/day flat, 40 km included, 32¢/km beyond that.
+**Updated 2026-08-11 from the user's own account/plan page** (supersedes the older
+22$/32¢ figures from the Jan 2025 PDF):
+
+- 24 $/day flat, 40 km included, 36¢/km beyond that.
 - Weekdays only (Monday–Friday).
-- Max 10 consecutive hours of use (beyond that, billed at the normal Économique
-  Extra hourly rate instead).
-- Midnight–6am doesn't count toward the 10-hour window, so in practice you can
-  take a car at 5pm and return it at 9am the next day (16 real hours) and still
-  only pay the 22$ flat rate, as long as actual "counted" usage stays ≤10h.
+- Max 10 **consecutive** hours of use — if the trip exceeds this, the *entire*
+  trip is billed at the normal Économique Extra hourly rate instead (not just
+  the excess).
+- Midnight–6am doesn't count toward the 10-hour window (one hour more than the
+  uncounted window for standard Économique Extra billing), so in practice you
+  can take a car at 5pm and return it at 9am the next day (16 real hours) and
+  still only pay the 24$ flat rate, as long as actual "counted" usage stays ≤10h.
 - Applied automatically by Communauto when it's cheaper — worth flagging to a
   Économique Extra subscriber who's asking about an overnight trip on a weekday,
   since it can beat both "extend the same rental" and "book a new one."
+- **Applies to FLEX bookings too, but only on the station-comparison side**:
+  if a FLEX trip would otherwise end up billed at the station-equivalent
+  price (rather than the raw per-minute FLEX price), Tarif Travail competes
+  against that station price the same way it would for a station vehicle.
+  It never competes against the FLEX per-minute price directly. Confirmed
+  with the user 2026-08-11; `trip-cost --weekday` now models this.
 
 ## Tarif Longue distance (long-distance flat rate) — Économique* holders only
 
@@ -77,9 +96,17 @@ short trips with a lot of km (e.g. 1h / 60km). Rarely beats Économique Extra's
 own rate since it's already so low; the script's `trip-cost` command checks this
 automatically and reports if Liberté Plus pricing would be applied.
 
+## Vehicle class surcharge — now modeled in the calculator
+
+- **Minivan surcharge: +15%** on trip cost (time and km combined).
+- **Family-category vehicle surcharge: +10%** on trip cost (time and km
+  combined). Confirmed against a real receipt on 2026-08-11.
+- Use `--vehicle-class family` or `--vehicle-class minivan` on `trip-cost`
+  (default `standard`, no surcharge). Applied as a final multiplier on top of
+  the winning price (station or FLEX, whichever applies).
+
 ## Other fees (not modeled in the calculator, mention if relevant)
 
-- Minivan surcharge: +15% on time+km. Family-category vehicle surcharge: +10%.
 - Trips longer than 28 days: +5$/additional day.
 - Phone reservations/changes: 1,50$ (day) / 2,50$ (evening). Free via app/web.
 - Damage waiver (collision): default deductible 750$/event, costs
